@@ -1,7 +1,7 @@
 --extra-index-url https://download.pytorch.org/whl/cu118
 # basic dependencies
-torch==2.4.0
-torchvision==0.19.0
+torch
+torchvision
 datasets==2.21.0
 transformers==4.46.3
 tokenizers==0.20.3
@@ -9,7 +9,7 @@ deepspeed==0.15.4
 accelerate==1.0.1
 peft==0.4.0
 timm==1.0.3
-numpy==1.24.4
+numpy~=1.26.4
 # data processing
 decord==0.6.0
 imageio==2.34.0
@@ -22,7 +22,7 @@ ffmpeg-python
 # misc
 scikit-learn==1.2.2
 huggingface_hub==0.23.4
-sentencepiece==0.1.99
+sentencepiece
 shortuuid
 einops==0.6.1
 einops-exts==0.0.4
