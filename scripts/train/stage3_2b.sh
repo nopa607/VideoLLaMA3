@@ -1,7 +1,7 @@
 #!/bin/bash
 # Environment Variables
 ARG_WORLD_SIZE=${1:-1}
-ARG_NPROC_PER_NODE=${2:-8}
+ARG_NPROC_PER_NODE=${2:-1}
 ARG_MASTER_ADDR="127.0.0.1"
 ARG_MASTER_PORT=16667
 ARG_RANK=0
@@ -41,11 +41,11 @@ torchrun --nnodes $WORLD_SIZE \
     videollama3/train.py \
     --deepspeed scripts/zero1.json \
     --model_type videollama3_qwen2 \
-    --model_path ${OUTP_DIR}/${WANDB_PROJECT}/${PRECEDING_RUN_NAME} \
+    --model_path weights/videollama3_2b_local \
     --vision_encoder DAMO-NLP-SG/SigLIP-NaViT \
     --mm_projector_type mlp2x_gelu \
-    --data_path ${DATA_DIR}/annotations.jsonl \
-    --data_folder ${DATA_DIR} \
+    --data_path ${DATA_DIR}/fps_demo.json \
+    --data_folder ${DATA_DIR}/fps_demo \
     --image_merge_size 1 \
     --video_merge_size 2 \
     --fps 1 \
