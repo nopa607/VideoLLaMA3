@@ -1,1 +1,0 @@
-from example_visual_referring import raw2normalized

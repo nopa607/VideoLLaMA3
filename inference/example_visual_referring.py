@@ -15,6 +15,18 @@ from assets.prompts.fps_frompt import FPS_PROMPT
 # matplotlib.use("TkAgg")
 
 
+def extract_issue_content(text):
+    """
+    从文本中提取"发现XXX！"格式的内容，返回XXX部分
+    格式和prompt相关
+    """
+    pattern = r"发现(.*?)！"
+    match = re.search(pattern, text)
+    if match:
+        return match.group(1)
+    return None
+
+
 def extract_boxes(text):
     # 处理嵌套列表格式 [[x,y,x,y],[x,y,x,y]]
     nested_matches = re.findall(r"\[\[(.*?)\]\]", text)
@@ -60,7 +72,7 @@ def raw2normalized(box, h, w):
     return box
 
 
-def show_box(raw_boxs, image, image_path, save_dir, process=True):
+def show_box(issue_content, raw_boxs, image, image_path, save_dir, process=True):
     box_image = image.copy()
     draw = ImageDraw.Draw(box_image)
 
@@ -92,7 +104,7 @@ def show_box(raw_boxs, image, image_path, save_dir, process=True):
 
     # 使用所有box的坐标创建文件名
     base_name = os.path.splitext(os.path.basename(image_path))[0]
-    output_name = f"{base_name}_boxes_{'_'.join(box_coords)}.png"
+    output_name = f"{base_name}_{issue_content}_boxes_{'_'.join(box_coords)}.png"
 
     plt.savefig(os.path.join(save_dir, output_name), bbox_inches="tight", pad_inches=0)
 
@@ -116,10 +128,10 @@ def predict(model, processor, image_path, conversation):
     output_ids = model.generate(**inputs, max_new_tokens=128)
     response = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
     print(response)
-
+    issue_content = extract_issue_content(response)
     extracted_boxs = extract_boxes(response)
     if extracted_boxs.__len__() > 0:
-        show_box(extracted_boxs, image, image_path, saved_dir)
+        show_box(issue_content, extracted_boxs, image, image_path, saved_dir)
     else:
         print("No box found")
 
@@ -133,7 +145,7 @@ if __name__ == "__main__":
     # show_box(extracted_box, image, image_path, saved_dir, process=True)
 
     # NOTE: transformers==4.46.3 is recommended for this script
-    # model_path = "DAMO-NLP-SG/VideoLLaMA3-7B-Image"
+    # model_path = "DAMO-NLP-SG/VideoLLaMA3-7B"
     model_path = "DAMO-NLP-SG/VideoLLaMA3-2B"
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
@@ -145,7 +157,7 @@ if __name__ == "__main__":
     processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
 
     # 获取fps目录下所有图片文件（不包含子文件夹）
-    fps_dir = "./assets/fps/"
+    fps_dir = "./scripts/dataset/input/fps_demo/images/"
     image_files = [
         f
         for f in os.listdir(fps_dir)
