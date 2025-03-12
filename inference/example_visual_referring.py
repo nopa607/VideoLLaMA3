@@ -9,7 +9,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from assets.prompts.fps_frompt import FPS_PROMPT
+from prompts.fps_frompt import FPS_PROMPT
 
 
 # matplotlib.use("TkAgg")
@@ -28,6 +28,18 @@ def extract_issue_content(text):
 
 
 def extract_boxes(text):
+    def normalize_coordinates(coords):
+        """将坐标统一转换为0-1000范围"""
+        # 检查坐标是否在0-1范围内
+        if all(0 <= x <= 1 for x in coords):
+            # 将0-1范围转换为0-1000范围
+            return [int(x * 1000) for x in coords]
+        # 如果已经是0-1000范围，直接返回
+        elif all(0 <= x <= 1000 for x in coords):
+            return [int(x) for x in coords]
+        else:
+            raise ValueError(f"Invalid coordinate range: {coords}")
+
     # 处理嵌套列表格式 [[x,y,x,y],[x,y,x,y]]
     nested_matches = re.findall(r"\[\[(.*?)\]\]", text)
     if nested_matches:
@@ -37,16 +49,18 @@ def extract_boxes(text):
             inner_list = []
             for array in arrays:
                 numbers = array.replace("[", "").replace("]", "").split(",")
-                inner_list.append([int(num) for num in numbers])
+                coords = [float(num) for num in numbers]
+                inner_list.append(normalize_coordinates(coords))
             result.extend(inner_list)
         return result
 
     # 处理单个列表格式 [x,y,x,y]
-    single_matches = re.findall(r"\[([\d,\s]+)\]", text)
+    single_matches = re.findall(r"\[([\d.,\s]+)\]", text)
     if single_matches:
         for match in single_matches:
             numbers = match.split(",")
-            return [[int(num) for num in numbers]]
+            coords = [float(num) for num in numbers]
+            return [normalize_coordinates(coords)]
 
     return []
 
@@ -97,7 +111,7 @@ def show_box(issue_content, raw_boxs, image, image_path, save_dir, process=True)
 
         # 绘制边界框
         draw.rectangle([bbox[0], bbox[1], bbox[2], bbox[3]], outline=color, width=2)
-        box_coords.extend([str(coord) for coord in bbox])
+        box_coords.extend([str(raw_box_coor) for raw_box_coor in raw_boxs])
 
     plt.imshow(box_image)
     plt.axis("off")
@@ -110,30 +124,42 @@ def show_box(issue_content, raw_boxs, image, image_path, save_dir, process=True)
 
 
 def predict(model, processor, image_path, conversation):
-    image = Image.open(image_path).convert("RGB")
-    saved_dir = "./assets/saved/"
-    os.makedirs(saved_dir, exist_ok=True)
-    # plt.imshow(image)
-    # plt.axis("off")
-    # plt.show()
+    try:
+        image = Image.open(image_path).convert("RGB")
+        saved_dir = "./assets/saved/"
+        os.makedirs(saved_dir, exist_ok=True)
 
-    # Single-turn conversation
-    inputs = processor(conversation=conversation, return_tensors="pt")
-    inputs = {
-        k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
-    }
-    if "pixel_values" in inputs:
-        inputs["pixel_values"] = inputs["pixel_values"].to(torch.bfloat16)
+        # Single-turn conversation
+        inputs = processor(conversation=conversation, return_tensors="pt")
+        inputs = {
+            k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
+        }
+        if "pixel_values" in inputs:
+            inputs["pixel_values"] = inputs["pixel_values"].to(torch.bfloat16)
 
-    output_ids = model.generate(**inputs, max_new_tokens=128)
-    response = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-    print(response)
-    issue_content = extract_issue_content(response)
-    extracted_boxs = extract_boxes(response)
-    if extracted_boxs.__len__() > 0:
-        show_box(issue_content, extracted_boxs, image, image_path, saved_dir)
-    else:
-        print("No box found")
+        output_ids = model.generate(**inputs, max_new_tokens=128)
+        response = processor.batch_decode(output_ids, skip_special_tokens=True)[
+            0
+        ].strip()
+        print(response)
+        issue_content = extract_issue_content(response)
+        # 依然是相对坐标
+        extracted_boxs = extract_boxes(response)
+        if extracted_boxs.__len__() > 0:
+            # show的是绝对坐标
+            show_box(issue_content, extracted_boxs, image, image_path, saved_dir)
+        else:
+            print("No box found")
+    finally:
+        # 清理显存
+        if "inputs" in locals():
+            del inputs
+        if "output_ids" in locals():
+            del output_ids
+        torch.cuda.empty_cache()  # 清理GPU缓存
+        import gc
+
+        gc.collect()  # 执行Python的垃圾回收
 
 
 if __name__ == "__main__":
